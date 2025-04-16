@@ -1,276 +1,568 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+// Types
+type WebVersion = "web2" | "web25" | "web3";
+type Mode = "register" | "lookup";
+
+interface RegisteredUser {
+  name: string;
+  address: string;
+  version: string;
+}
+
+interface ColorScheme {
+  gradient: string;
+  subtle: string;
+  accent: string;
+  button: string;
+  border: string;
+  hoverBg: string;
+}
+
+// Implementation descriptions
+const IMPLEMENTATION_DESCRIPTIONS = {
+  web2: "Traditional centralized database lookup. Names and addresses stored on a server with no cryptographic verification.",
+  web25: "Hybrid approach with cryptographic proofs. Server generates ZK proofs for verification without full decentralization.",
+  web3: "Fully decentralized on Miden blockchain. Trustless name resolution using ZK proofs and on-chain verification.",
+};
+
+// Toast Portal (Reusable for both error & success)
+const Toast = ({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) => (
+  <motion.div
+    initial={{ opacity: 0, y: -15 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, y: -15 }}
+    className={`fixed top-6 right-6 z-[120] px-6 py-4 rounded-lg shadow-lg text-white ${type === "success"
+      ? "bg-teal-700 border border-teal-400"
+      : "bg-red-800 border border-red-400"
+      } flex items-center gap-2`}
+    role="alert"
+    aria-live="assertive"
+  >
+    <span>
+      {type === "success" ? (
+        <svg className="inline mr-1" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+      ) : (
+        <svg className="inline mr-1" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+      )}
+    </span>
+    <span>{message}</span>
+    <button
+      aria-label="Close notification"
+      className="ml-4 py-1 px-2 rounded bg-white/10 hover:bg-white/30 transition"
+      onClick={onClose}
+    >
+      ×
+    </button>
+  </motion.div>
+);
+
+// ------ UI COMPONENTS ------
+
+const VersionSelector = ({
+  webVersion,
+  setWebVersion,
+}: {
+  webVersion: WebVersion;
+  setWebVersion: (v: WebVersion) => void;
+}) => (
+  <div>
+    <label className="text-sm text-indigo-300 mb-2 block">Implementation</label>
+    <div className="grid grid-cols-3 gap-1 bg-black/40 p-1.5 rounded-xl" role="group" aria-label="Implementation">
+      {(["web2", "web25", "web3"] as const).map((version) => (
+        <button
+          key={version}
+          type="button"
+          aria-pressed={webVersion === version}
+          onClick={() => setWebVersion(version)}
+          className={
+            `px-3 py-2 rounded-lg font-medium text-xs duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${webVersion === version
+              ? `ring-1 ring-white/30 bg-gradient-to-r ${getColorSchemeForVersion(version).gradient} text-white shadow`
+              : "text-indigo-300 hover:text-white hover:bg-white/10"}`
+          }
+        >{getVersionDisplay(version)}
+        </button>
+      ))}
+    </div>
+  </div>
+);
+
+const ModeSelector = ({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) => (
+  <div>
+    <label className="text-sm text-indigo-300 mb-2 block">Choose Mode</label>
+    <div className="grid grid-cols-2 gap-3 bg-black/40 p-1.5 rounded-xl" role="group" aria-label="Mode">
+      {(["register", "lookup"] as const).map((m) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={mode === m}
+          onClick={() => setMode(m)}
+          className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2${mode === m
+            ? " bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow"
+            : " text-indigo-300 hover:text-white hover:bg-white/10"
+            }`}
+        >{m === "register" ? "Register Name" : "Lookup Name"}</button>
+      ))}
+    </div>
+  </div>
+);
+
+const InputField = ({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  disabled?: boolean;
+}) => (
+  <div>
+    <label htmlFor={id} className="block text-sm font-medium text-indigo-200 mb-1">
+      {label}
+    </label>
+    <input
+      id={id}
+      type="text"
+      autoCapitalize="none"
+      autoCorrect="off"
+      spellCheck={false}
+      value={value}
+      onChange={onChange}
+      className="w-full px-5 py-3 bg-white/10 border border-white/10 rounded-xl focus:ring-2 focus:border-transparent text-white transition outline-none focus:ring-indigo-500/60 font-mono"
+      placeholder={placeholder}
+      disabled={disabled}
+      autoComplete="off"
+    />
+  </div>
+);
+
+const ActionButton = ({
+  type = "submit",
+  disabled = false,
+  colorScheme,
+  children,
+}: {
+  type?: "button" | "submit";
+  disabled?: boolean;
+  colorScheme: ColorScheme;
+  children: React.ReactNode;
+}) => (
+  <button
+    type={type}
+    disabled={disabled}
+    className={`w-full px-6 py-3 bg-gradient-to-r ${colorScheme.button} rounded-xl font-semibold text-white shadow-lg hover:shadow-indigo-900/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-400 focus:ring-offset-black ${disabled ? "opacity-50 pointer-events-none" : "hover:-translate-y-0.5"
+      } duration-200`}
+  >
+    {children}
+  </button>
+);
+
+const RegisteredUsersTable = ({
+  users,
+  isLoading,
+}: {
+  users: RegisteredUser[];
+  isLoading: boolean;
+}) => {
+  if (isLoading)
+    return (
+      <div className="flex items-center justify-center py-5">
+        <svg className="animate-spin h-5 w-5 text-indigo-400 mr-2" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span className="text-indigo-300">Loading names...</span>
+      </div>
+    );
+  if (users.length === 0)
+    return (
+      <div className="text-center py-5 border border-dashed border-white/10 rounded-xl text-indigo-400">
+        No names registered (yet).
+      </div>
+    );
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <thead className="bg-black/20 rounded-lg">
+          <tr>
+            <th className="px-4 py-3 text-xs font-medium text-indigo-300 uppercase tracking-wider">Name</th>
+            <th className="px-4 py-3 text-xs font-medium text-indigo-300 uppercase tracking-wider">Address</th>
+            <th className="px-4 py-3 text-xs font-medium text-indigo-300 uppercase tracking-wider">Version</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {users.map((user, i) => (
+            <motion.tr
+              key={`${user.name}-${i}`}
+              className="hover:bg-white/5 transition-colors"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03 }}
+            >
+              <td className="px-4 py-3 text-sm font-mono text-white">{user.name}</td>
+              <td className="px-4 py-3 text-sm font-mono text-white truncate max-w-[180px]">{user.address}</td>
+              <td className="px-4 py-3"><VersionBadge version={user.version} /></td>
+            </motion.tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const VersionBadge = ({ version }: { version: string }) => {
+  const badge = {
+    "2": "bg-blue-900/40 text-blue-300 border-blue-400/40",
+    "2.5": "bg-purple-900/40 text-purple-300 border-purple-400/40",
+    "3": "bg-cyan-900/40 text-cyan-300 border-cyan-400/40",
+  }[version] || "bg-gray-900/40 text-gray-300 border-gray-400/30";
+  return (
+    <span className={`px-2 py-1 rounded text-xs font-medium border ${badge}`}>
+      {getVersionDisplayText(version)}
+    </span>
+  );
+};
+
+// ------ UTILITIES ------
+
+function getVersionDisplayText(version: string): string {
+  switch (version) {
+    case "2": return "Web 2.0";
+    case "2.5": return "Web 2.5";
+    case "3": return "Web 3.0";
+    default: return `Web ${version}`;
+  }
+}
+function getVersionDisplay(version: WebVersion): string {
+  switch (version) {
+    case "web2": return "Web 2.0";
+    case "web25": return "Web 2.5";
+    case "web3": return "Web 3.0";
+  }
+}
+function getVersionParam(version: WebVersion): string {
+  switch (version) {
+    case "web2": return "2";
+    case "web25": return "2.5";
+    case "web3": return "3";
+    default: return "2";
+  }
+}
+function getColorSchemeForVersion(version: WebVersion): ColorScheme {
+  switch (version) {
+    case "web2":
+      return {
+        gradient: "from-blue-600 to-blue-500",
+        subtle: "from-blue-900/30 to-blue-800/40",
+        accent: "text-blue-200",
+        button: "from-blue-600 to-blue-700",
+        border: "border-blue-500/30",
+        hoverBg: "hover:bg-blue-600/10",
+      };
+    case "web25":
+      return {
+        gradient: "from-purple-600 to-indigo-700",
+        subtle: "from-purple-900/40 to-indigo-800/40",
+        accent: "text-purple-200",
+        button: "from-purple-600 to-indigo-700",
+        border: "border-purple-500/30",
+        hoverBg: "hover:bg-purple-600/10",
+      };
+    case "web3":
+      return {
+        gradient: "from-cyan-500 to-teal-500",
+        subtle: "from-cyan-900/30 to-teal-800/40",
+        accent: "text-cyan-200",
+        button: "from-cyan-600 to-teal-700",
+        border: "border-cyan-500/30",
+        hoverBg: "hover:bg-cyan-600/10",
+      };
+  }
+}
+const validateMidenName = (name: string): boolean =>
+  name.trim().toLowerCase().endsWith(".miden");
+
+// ------ MAIN PAGE ------
 
 export default function Home() {
-  const [mode, setMode] = useState<'register' | 'lookup'>('register');
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
-  const [lookupResult, setLookupResult] = useState('');
+  // State
+  const [mode, setMode] = useState<Mode>("register");
+  const [webVersion, setWebVersion] = useState<WebVersion>("web2");
+  const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [lookupResult, setLookupResult] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  // Toast
+  const [toast, setToast] = useState<null | { message: string; type: "success" | "error" }>(null);
 
-  // Function to validate if the name ends with .miden
-  const validateMidenName = (inputName: string): boolean => {
-    return inputName.trim().toLowerCase().endsWith('.miden');
+  const colorScheme = useMemo(() => getColorSchemeForVersion(webVersion), [webVersion]);
+
+  // Fetch registered users
+  const fetchRegisteredUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const response = await fetch("http://localhost:3001/list");
+      if (!response.ok) throw new Error("Failed to fetch users");
+      setRegisteredUsers(await response.json());
+    } catch (e) {
+      // Silent fail, or show notification if you want
+    } finally {
+      setIsLoadingUsers(false);
+    }
   };
-
+  useEffect(() => {
+    fetchRegisteredUsers();
+  }, []);
+  // Handlers
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setName(e.target.value);
-    setError('');
-    setLookupResult('');
+    setLookupResult("");
   };
-
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setAddress(e.target.value);
-    setError('');
   };
-
+  // Submit (register)
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateMidenName(name)) {
-      setError('Name must end with .miden');
-      return;
-    }
-
-    if (!address) {
-      setError('Address is required');
-      return;
-    }
+    if (!validateMidenName(name)) return setToast({ type: "error", message: "Name must end with .miden" });
+    if (!address) return setToast({ type: "error", message: "Address is required" });
 
     setIsSubmitting(true);
-    setError('');
-
     try {
-      // Connect to your Rust server
-      const response = await fetch(`http://localhost:3001/register?name=${encodeURIComponent(name)}&address=${encodeURIComponent(address)}`, {
-        method: 'PUT',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Registration failed: ${errorText}`);
-      }
-
-      setName('');
-      setAddress('');
-      alert(`Successfully registered ${name}`);
+      const versionParam = getVersionParam(webVersion);
+      const response = await fetch(
+        `http://localhost:3001/register?name=${encodeURIComponent(name)}&address=${encodeURIComponent(address)}&version=${versionParam}`,
+        { method: "PUT" }
+      );
+      if (!response.ok) throw new Error(await response.text());
+      setToast({ type: "success", message: `Registered ${name} (${getVersionDisplay(webVersion)})!` });
+      setName("");
+      setAddress("");
+      fetchRegisteredUsers();
     } catch (err) {
-      setError(`Error: ${err instanceof Error ? err.message : 'Registration failed'}`);
+      setToast({ type: "error", message: `Error: ${String((err as Error).message)}` });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Submit (lookup)
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateMidenName(name)) {
-      setError('Name must end with .miden');
-      return;
-    }
-
+    if (!validateMidenName(name)) return setToast({ type: "error", message: "Name must end with .miden" });
     setIsSubmitting(true);
-    setError('');
-
+    setLookupResult("");
     try {
-      const response = await fetch(`http://localhost:3001/lookup?name=${encodeURIComponent(name)}`, {
-        method: 'GET',
-      });
-
+      const versionParam = getVersionParam(webVersion);
+      const response = await fetch(
+        `http://localhost:3001/lookup?name=${encodeURIComponent(name)}&version=${versionParam}`
+      );
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Lookup failed: ${errorText}`);
+        setLookupResult(response.status === 404 ? "Name not found" : "Lookup failed");
+      } else {
+        setLookupResult(await response.text());
       }
-
-      // When your server returns actual address data, parse it accordingly
-      const data = await response.text();
-      setLookupResult(data || "No address found");
     } catch (err) {
-      setError(`Error: ${err instanceof Error ? err.message : 'Lookup failed'}`);
-      setLookupResult('');
+      setToast({ type: "error", message: `Error: ${String((err as Error).message)}` });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // --- Main Render ---
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-blue-900 text-white flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-4 font-sans">
-      {/* Background Decorative Elements */}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-950 via-purple-950 to-black flex flex-col items-center justify-between p-5 md:p-8 relative overflow-hidden">
+      {/* Toast */}
+      <AnimatePresence>
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Background decorations */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500 rounded-full opacity-10 blur-3xl"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-96 h-96 bg-purple-500 rounded-full opacity-10 blur-3xl"></div>
-        <div className="absolute top-2/3 left-1/2 w-80 h-80 bg-indigo-500 rounded-full opacity-10 blur-3xl"></div>
+        <motion.div
+          className="absolute top-[-8%] left-[32%] w-[480px] h-[480px] bg-blue-600/10 rounded-full filter blur-3xl opacity-30"
+          animate={{
+            y: [0, 20, 0],
+            scale: [1, 1.05, 1]
+          }}
+          transition={{
+            duration: 10,
+            repeat: Infinity,
+            repeatType: "reverse"
+          }}
+        />
+        <motion.div
+          className="absolute bottom-[5%] right-[15%] w-[380px] h-[380px] bg-purple-600/20 rounded-full filter blur-3xl opacity-40"
+          animate={{
+            y: [0, -20, 0],
+            scale: [1, 1.04, 1]
+          }}
+          transition={{
+            duration: 12,
+            repeat: Infinity,
+            repeatType: "reverse",
+            delay: 1
+          }}
+        />
       </div>
-
-      <div className="max-w-4xl mx-auto text-center relative z-10">
-        <div className="mb-2 inline-block">
-          <span className="inline-block px-4 py-1 bg-white/10 backdrop-blur-md rounded-full text-indigo-200 text-lg tracking-wide font-light animate-pulse">
-            welcome to
-          </span>
-        </div>
-
-        <h1 className="text-5xl sm:text-7xl font-extrabold mb-8 tracking-tight">
-          <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-purple-300 to-indigo-300 drop-shadow-lg">
-            Miden Name Service
-          </span>
-        </h1>
-
-        <div className="backdrop-blur-lg bg-white/10 p-8 rounded-3xl shadow-2xl mb-10 border border-white/20 transition-all duration-500 hover:bg-white/15">
-          <p className="text-lg sm:text-xl leading-relaxed text-indigo-100 font-light">
-            <span className="font-medium text-white">Simplify your blockchain journey.</span> No more struggling with complex addresses like 0x298392...
-            Register and look up human-readable names on the Miden blockchain, connecting with friends
-            and services effortlessly. <span className="italic text-cyan-300">Your digital identity, reimagined.</span>
-          </p>
-        </div>
-
-        {/* Toggle Buttons */}
-        <div className="inline-flex p-1.5 rounded-2xl shadow-xl mb-8 bg-white/5 backdrop-blur-md border border-white/10" role="group">
-          <button
-            type="button"
-            className={`mr-2 px-8 py-3.5 text-md font-medium rounded-xl ${mode === 'register'
-              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg'
-              : 'bg-white/5 text-gray-200 hover:bg-white/10'
-              } transition-all duration-300`}
-            onClick={() => {
-              setMode('register');
-              setError('');
-              setLookupResult('');
-            }}
+      {/* Main Card */}
+      <div className="w-full max-w-3xl z-10">
+        <motion.h1
+          className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-cyan-200 text-center mb-8 drop-shadow"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          Miden Name Service
+        </motion.h1>
+        <motion.div
+          className="bg-black/50 shadow-2xl rounded-3xl border border-white/10 p-6 md:p-8 backdrop-blur-md"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.18 }}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <ModeSelector mode={mode} setMode={setMode} />
+            <VersionSelector webVersion={webVersion} setWebVersion={setWebVersion} />
+          </div>
+          <motion.div
+            className={`rounded-xl bg-gradient-to-r overflow-hidden mb-8 border ${colorScheme.border}`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
           >
-            Register a Name
-          </button>
-          <button
-            type="button"
-            className={`ml-2 px-8 py-3.5 text-md font-medium rounded-xl ${mode === 'lookup'
-              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg'
-              : 'bg-white/5 text-gray-200 hover:bg-white/10'
-              } transition-all duration-300`}
-            onClick={() => {
-              setMode('lookup');
-              setError('');
-              setLookupResult('');
-            }}
-          >
-            Lookup a Name
-          </button>
-        </div>
-
-        {/* Conditional Form */}
-        <div className="backdrop-blur-xl bg-white/10 p-8 rounded-3xl shadow-2xl w-full max-w-md mx-auto border border-white/20 hover:border-white/30 transition-all duration-500">
-          {error && (
-            <div className="mb-4 p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-white text-sm font-medium">
-              <span className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-                {error}
-              </span>
+            <div className={`p-5 ${colorScheme.subtle}`}>
+              <h3 className={`text-lg font-semibold mb-1 ${colorScheme.accent}`}>{getVersionDisplay(webVersion)} Implementation</h3>
+              <p className="text-white/80 text-sm leading-relaxed select-none">
+                {IMPLEMENTATION_DESCRIPTIONS[webVersion]}
+              </p>
             </div>
-          )}
+          </motion.div>
 
-          {mode === 'register' ? (
-            <form onSubmit={handleRegister} className="space-y-6">
-              <div className="text-left">
-                <label htmlFor="name" className="block text-md font-medium text-indigo-200 mb-2">
-                  Name
-                </label>
-                <input
-                  type="text"
-                  id="name"
+          {/* Form section */}
+          <div className="mb-8 relative">
+            <h2 className="text-xl font-bold text-white mb-6">
+              {mode === "register" ? "Register Name" : "Lookup Name"}
+            </h2>
+            {/* Action Loading Overlay */}
+            <AnimatePresence>
+              {isSubmitting && (
+                <motion.div
+                  className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-2xl z-20"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <svg className="animate-spin w-8 h-8 text-indigo-300" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            {mode === "register" ? (
+              <form onSubmit={handleRegister} className="space-y-4">
+                <InputField id="name" label="Name" value={name} onChange={handleNameChange} placeholder="must end with .miden" disabled={isSubmitting} />
+                <InputField id="address" label="Address" value={address} onChange={handleAddressChange} placeholder="address to associate" disabled={isSubmitting} />
+                <ActionButton disabled={isSubmitting} colorScheme={colorScheme}>
+                  Register Name
+                </ActionButton>
+              </form>
+            ) : (
+              <form onSubmit={handleLookup} className="space-y-4">
+                <InputField
+                  id="lookup-name"
+                  label="Name"
                   value={name}
                   onChange={handleNameChange}
-                  className={`w-full px-5 py-3 bg-white/5 border rounded-xl focus:ring-2 focus:border-transparent text-white transition-all duration-300 placeholder:text-indigo-200/50 ${error ? 'border-red-500 focus:ring-red-400' : 'border-indigo-300/30 focus:ring-cyan-400'
-                    }`}
-                  placeholder="yourname.miden"
-                  required
+                  placeholder="name to lookup"
+                  disabled={isSubmitting}
                 />
-                <p className="text-xs text-indigo-300 mt-1">Names must end with .miden (e.g., yourname.miden)</p>
-              </div>
-              <div className="text-left">
-                <label htmlFor="address" className="block text-md font-medium text-indigo-200 mb-2">
-                  Miden Address
-                </label>
-                <input
-                  type="text"
-                  id="address"
-                  value={address}
-                  onChange={handleAddressChange}
-                  className="w-full px-5 py-3 bg-white/5 border border-indigo-300/30 rounded-xl focus:ring-2 focus:ring-cyan-400 focus:border-transparent text-white transition-all duration-300 placeholder:text-indigo-200/50"
-                  placeholder="0x..."
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full px-5 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl font-medium text-white transition-all duration-300 shadow-lg shadow-indigo-500/30 disabled:opacity-50 transform hover:-translate-y-0.5"
-              >
-                {isSubmitting ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Registering...
-                  </span>
-                ) : 'Register Name'}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleLookup} className="space-y-6">
-              <div className="text-left">
-                <label htmlFor="lookupName" className="block text-md font-medium text-indigo-200 mb-2">
-                  Name to Lookup
-                </label>
-                <input
-                  type="text"
-                  id="lookupName"
-                  value={name}
-                  onChange={handleNameChange}
-                  className={`w-full px-5 py-3 bg-white/5 border rounded-xl focus:ring-2 focus:border-transparent text-white transition-all duration-300 placeholder:text-indigo-200/50 ${error ? 'border-red-500 focus:ring-red-400' : 'border-indigo-300/30 focus:ring-cyan-400'
-                    }`}
-                  placeholder="name.miden"
-                  required
-                />
-                <p className="text-xs text-indigo-300 mt-1">Names must end with .miden (e.g., name.miden)</p>
-              </div>
-              {lookupResult && (
-                <div className="mt-4 p-5 bg-gradient-to-r from-indigo-900/70 to-purple-900/70 backdrop-blur-xl rounded-xl border border-indigo-500/20">
-                  <p className="text-sm text-cyan-300 font-medium">Address:</p>
-                  <p className="text-indigo-100 font-mono break-all mt-1 tracking-wider">{lookupResult}</p>
+                {/* Lookup result */}
+                <AnimatePresence>
+                  {lookupResult && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="p-4 mt-2 bg-indigo-900/40 border border-indigo-500/40 rounded-xl"
+                    >
+                      <div className="text-indigo-200 text-xs font-medium mb-1">Result:</div>
+                      <div className="font-mono text-sm text-white break-all whitespace-pre-line select-all">{lookupResult}</div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                <ActionButton disabled={isSubmitting} colorScheme={colorScheme}>
+                  Lookup Name
+                </ActionButton>
+              </form>
+            )}
+          </div>
+          {/* List of registered users - only show in register mode */}
+          {mode === "register" && (
+            <motion.div
+              className="border-t border-white/10 pt-8"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+            >
+              <h3 className="text-lg font-bold text-white mb-4">Registered Names</h3>
+              <RegisteredUsersTable users={registeredUsers} isLoading={isLoadingUsers} />
+              {!isLoadingUsers && registeredUsers.length > 0 && (
+                <div className="mt-3 text-xs text-white/50 italic text-center">
+                  <p>
+                    Showing {registeredUsers.length} registered {registeredUsers.length === 1 ? "name" : "names"}
+                  </p>
                 </div>
               )}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full px-5 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-xl font-medium text-white transition-all duration-300 shadow-lg shadow-indigo-500/30 disabled:opacity-50 transform hover:-translate-y-0.5"
-              >
-                {isSubmitting ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Looking up...
-                  </span>
-                ) : 'Lookup Name'}
-              </button>
-            </form>
+            </motion.div>
           )}
-        </div>
+        </motion.div>
       </div>
-
-      <div className="mt-16 text-indigo-300 text-sm relative z-10">
+      {/* Footer */}
+      <motion.div
+        className="text-center w-full text-indigo-300 text-sm relative z-10 mt-14"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1 }}
+      >
         <a
-          href='https://github.com/0xMiden'
-          className="text-cyan-300 hover:text-cyan-200 transition-colors underline decoration-dotted"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="https://github.com/0xMiden"
+          className="text-cyan-300 hover:text-cyan-200 transition-colors underline  underline-offset-2 decoration-dotted flex items-center justify-center gap-2"
+          target="_blank" rel="noopener noreferrer"
         >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
           Powered by Miden Blockchain Technology
         </a>
-      </div>
+      </motion.div>
+      {/* Glow keyframes for Toast */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px);}
+          to {opacity: 1; transform: translateY(0);}
+        }
+        @keyframes fadeOut {
+          from {opacity: 1; transform: translateY(0);}
+          to {opacity: 0; transform: translateY(-10px);}
+        }
+      `}</style>
     </div>
   );
 }
