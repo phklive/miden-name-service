@@ -1,0 +1,8 @@
+# Rust files
+target/
+
+# miden-client files
+keystore/
+templates/
+store.sqlite3
+miden-client.toml

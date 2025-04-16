@@ -1,0 +1,45 @@
+use.miden::account
+
+#! Register a name for a account_id
+#! 
+#! Inputs: []
+#! Outputs: []
+export.register
+    # get inputs from advice provider
+    push.1.1.1.1 adv.push_mapval dropw
+    padw adv_loadw padw adv_loadw
+    # => [NAME_WORD, ACCOUNT_ID]
+
+    debug.stack
+
+    push.0
+    # => [index, NAME_WORD, ACCOUNT_ID]
+
+    exec.account::set_map_item dropw dropw dropw dropw
+    # => []
+end
+
+#! Lookup an account id registered for the given name
+#! 
+#! Inputs: []
+#! Outputs: [ACCOUNT_ID]
+export.lookup
+    # get inputs from advice provider
+    push.1.1.1.1 adv.push_mapval dropw padw adv_loadw 
+    # => [NAME_WORD]
+
+    push.0
+    # => [index, NAME_WORD]
+
+    exec.account::get_map_item swapw dropw
+    # => [ACCOUNT_ID] 
+end
+
+#! Increments the nonce of the account
+#!
+#! Inputs: []
+#! Outputs: []
+export.increment_nonce
+    push.1 exec.account::incr_nonce
+    # => []
+end

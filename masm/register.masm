@@ -1,0 +1,9 @@
+use.mns::mns_contract
+
+begin
+    # register name for account_id
+    call.mns_contract::register
+
+    # increment nonce of mns account
+    call.mns_contract::increment_nonce
+end

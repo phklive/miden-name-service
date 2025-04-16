@@ -1,0 +1,9 @@
+use.mns::mns_contract
+
+begin
+    # lookup account_id for name
+    call.mns_contract::lookup
+
+    # increment nonce of mns account
+    call.mns_contract::increment_nonce
+end
