@@ -8,9 +8,10 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum AppError {
-    NotFound(String),
     BadRequest(String),
+    NotFound(String),
     Internal(String),
+    Database(String),
 }
 
 // Human-friendly error messages
@@ -20,6 +21,7 @@ impl fmt::Display for AppError {
             AppError::NotFound(msg) => format!("Not Found: {}", msg),
             AppError::BadRequest(msg) => format!("Bad Request: {}", msg),
             AppError::Internal(msg) => format!("Internal Server Error: {}", msg),
+            AppError::Database(msg) => format!("Database Error: {}", msg),
         };
         write!(f, "{}", message)
     }
@@ -42,6 +44,7 @@ impl IntoResponse for AppError {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            AppError::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
         };
 
         // Log internal server errors

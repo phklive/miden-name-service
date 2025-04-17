@@ -20,7 +20,7 @@ pub async fn register(
     account_id: AccountId,
     name: String,
     address: String,
-) -> Result<(String, String)> {
+) -> Result<String> {
     // Input validation
     if name.is_empty() {
         return Err(AppError::BadRequest("Name cannot be empty".to_string()));
@@ -107,7 +107,10 @@ pub async fn register(
             AppError::Internal(format!("Transaction submission failed: {}", e))
         })?;
 
-    Ok((name, address))
+    // build response
+    let response = format!("Successfully registered `{name}` for `{address}` using Web2.5");
+
+    Ok(response)
 }
 
 pub async fn lookup(client: &mut Client, account_id: AccountId, name: String) -> Result<String> {

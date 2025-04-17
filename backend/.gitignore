@@ -8,3 +8,6 @@ keystore/
 templates/
 store.sqlite3
 miden-client.toml
+
+# users database
+users.sqlite3

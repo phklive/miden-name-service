@@ -1635,6 +1635,7 @@ dependencies = [
  "miden-lib",
  "miden-objects",
  "rand 0.9.0",
+ "rusqlite",
  "serde",
  "tokio",
  "tower-http",

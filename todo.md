@@ -8,6 +8,7 @@
     * Ethereum: [ENS](https://app.ens.domains/)
     * Ethereum: [UD](https://unstoppabledomains.com/)
 [ ] Deploy app
+[ ] Add benchmarks (to see the difference in speed between the different implementations)
      
 ## Backend
 

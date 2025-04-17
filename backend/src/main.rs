@@ -1,18 +1,20 @@
 use axum::Router;
 use axum::routing::{get, put};
 use log::info;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
 
+mod db;
 mod error;
 mod handler;
 mod serde;
 mod service;
 mod utils;
 
-use handler::{AppState, ClientRequest, User, list_handler, lookup_handler, register_handler};
+use db::Database;
+use handler::{AppState, ClientRequest, lookup_handler, register_handler};
 use utils::{create_account, create_client, remove_store};
 
 #[tokio::main]
@@ -26,23 +28,31 @@ async fn main() {
     info!("Creating client");
     remove_store();
 
+    // Initialize the database
+    let db_path = "users.sqlite3";
+    let database = match Database::new(db_path) {
+        Ok(db) => {
+            info!("Database initialized successfully at {}", db_path);
+            Arc::new(db)
+        }
+        Err(e) => {
+            panic!("Failed to initialize database: {}", e);
+        }
+    };
+
     // Create a new local task set to run a client that must run on the same thread
     let local = tokio::task::LocalSet::new();
 
     // Create channel for communication with the client
     let (tx, mut rx) = mpsc::channel(32);
 
-    // Initial empty users vector with thread-safe wrapper
-    let users = Arc::new(Mutex::new(Vec::<User>::new()));
-
-    // Create application state
-    let state = AppState { tx, users };
+    // Create application state with database
+    let state = AppState { tx, db: database };
 
     // Create the router with all routes and middleware
     let app = Router::new()
         .route("/register", put(register_handler))
         .route("/lookup", get(lookup_handler))
-        .route("/list", get(list_handler))
         .with_state(state)
         .layer(
             CorsLayer::new()
