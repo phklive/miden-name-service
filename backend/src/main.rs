@@ -1,6 +1,7 @@
 use axum::Router;
 use axum::routing::{get, put};
 use log::info;
+use miden_client::account::AccountId;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
@@ -15,7 +16,9 @@ mod utils;
 
 use db::Database;
 use handler::{AppState, ClientRequest, lookup_handler, register_handler};
-use utils::{create_account, create_client, remove_store};
+use utils::{create_account, create_client, deploy_account, remove_store};
+
+const CONTRACT_ID: &str = "0xefb0133c1f1fd30000046a1752b96a";
 
 #[tokio::main]
 async fn main() {
@@ -24,8 +27,7 @@ async fn main() {
 
     info!("Initializing MNS server");
 
-    // Initialize client
-    info!("Creating client");
+    // sanitize
     remove_store();
 
     // Initialize the database
@@ -63,10 +65,35 @@ async fn main() {
 
     // Spawn a local task to handle client operations
     local.spawn_local(async move {
+        info!("Creating client and deploying mns account");
         let mut client = create_client().await;
-        let account = create_account(&mut client).await;
+        let _ = client.sync_state().await.unwrap();
+        let deployed_account_id = AccountId::from_hex(CONTRACT_ID).unwrap();
 
-        info!("Client initialized successfully");
+        // Try to import existing account or create a new one
+        let account = match client.import_account_by_id(deployed_account_id).await {
+            Ok(()) => {
+                // Successfully imported, now retrieve it
+                match client.get_account(deployed_account_id).await {
+                    Ok(Some(account_record)) => {
+                        info!("Successfully imported existing MNS contract account");
+                        account_record.account().clone()
+                    }
+                    Ok(None) => {
+                        panic!("Imported account from blockchain but it's not present in client")
+                    }
+                    Err(err) => panic!("Failed to retrieve imported account: {}", err),
+                }
+            }
+            Err(err) => {
+                // Account doesn't exist on chain, create and deploy a new one
+                info!("Account not found on chain: {}", err);
+                let new_account = create_account(&mut client).await;
+                let _ = deploy_account(&mut client, &new_account).await;
+                info!("Client initialized and MNS account deployed successfully");
+                new_account
+            }
+        };
 
         // Process client operations from the queue
         while let Some(request) = rx.recv().await {

@@ -1,6 +1,15 @@
 use.miden::account
 
-#! Register a name for a account_id
+#! Deploys this contract (Placeholder fn enabling the deployment of this contract to the chain)
+#! 
+#! Inputs: []
+#! Outputs: []
+export.deploy
+    push.0 drop
+    # => []
+end
+
+#! Registers a name for a account_id
 #! 
 #! Inputs: []
 #! Outputs: []
@@ -10,8 +19,6 @@ export.register
     padw adv_loadw padw adv_loadw
     # => [NAME_WORD, ACCOUNT_ID]
 
-    debug.stack
-
     push.0
     # => [index, NAME_WORD, ACCOUNT_ID]
 
@@ -19,7 +26,7 @@ export.register
     # => []
 end
 
-#! Lookup an account id registered for the given name
+#! Lookups an account id registered for the given name
 #! 
 #! Inputs: []
 #! Outputs: [ACCOUNT_ID]

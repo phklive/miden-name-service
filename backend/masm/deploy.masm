@@ -1,0 +1,9 @@
+use.mns::mns_contract
+
+begin
+    # deploy mns contract to the miden chain
+    call.mns_contract::deploy
+
+    # increment nonce of mns account
+    call.mns_contract::increment_nonce
+end

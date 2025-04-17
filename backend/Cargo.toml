@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.97"
 axum = { version = "0.8.3", features = ["json"] }
-miden-client = { version = "0.8.1", features = ["concurrent", "sqlite", "tonic", "testing"] }
+miden-client = { version = "0.8.1", features = ["concurrent", "sqlite", "tonic"] }
 miden-lib = { version = "0.8", default-features = false }
 miden-objects = { version = "0.8", default-features = false }
 miden-assembly = "0.13.0"

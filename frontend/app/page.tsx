@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Define types
@@ -12,10 +12,23 @@ interface Version {
   desc: string;
 }
 
-// Response type for the lookup result - matching server format
+// Response types matching the server format
 interface LookupResponse {
   address: string;
   version: string;
+}
+
+interface RegisterResponse {
+  name: string;
+  address: string;
+  version: string;
+  transaction_id?: string;
+}
+
+// Extended response type to handle both lookup and registration
+interface ResponseWithTx extends LookupResponse {
+  transaction_id?: string;
+  justRegistered?: boolean;  // Flag to indicate a fresh registration
 }
 
 // Version configurations
@@ -103,23 +116,13 @@ export default function Home() {
   const [selected, setSelected] = useState<WebVersion>("2");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
-  const [lookupResult, setLookupResult] = useState<LookupResponse | null>(null);
+  const [lookupResult, setLookupResult] = useState<ResponseWithTx | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAddressInput, setShowAddressInput] = useState(false);
-
-  // Auto-dismiss error message after 3 seconds
-  useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => {
-        setError('');
-      }, 3000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [error]);
+  const [indexingTransaction, setIndexingTransaction] = useState(false); // New state for transaction indexing
 
   // Memoized color scheme
   const colorScheme = useMemo(
@@ -135,20 +138,13 @@ export default function Home() {
 
   // Handle version change - reset form state
   const handleVersionChange = (newVersion: WebVersion) => {
-    // Skip if trying to select Web 3.0
-    if (newVersion === "3") {
-      return;
-    }
-
-    if (selected !== newVersion) {
-      setSelected(newVersion);
-      setName("");
-      setAddress("");
-      setLookupResult(null);
-      setError("");
-      setHasSearched(false);
-      setShowAddressInput(false);
-    }
+    setSelected(newVersion);
+    setName("");
+    setAddress("");
+    setLookupResult(null);
+    setError("");
+    setHasSearched(false);
+    setShowAddressInput(false);
   };
 
   const current = VERSIONS.find((v) => v.key === selected);
@@ -195,7 +191,10 @@ export default function Home() {
       } else {
         // Name is registered, server returned the address and version
         const data: LookupResponse = await response.json();
-        setLookupResult(data);
+        setLookupResult({
+          ...data,
+          justRegistered: false // Explicitly mark as not just registered
+        });
         setHasSearched(true);
       }
     } catch (err) {
@@ -243,6 +242,9 @@ export default function Home() {
         throw new Error(`Registration failed: ${errorText}`);
       }
 
+      // Parse the response which includes transaction_id for web 2.5
+      const registrationResult: RegisterResponse = await response.json();
+
       // Show success message
       const successToast = document.createElement('div');
       successToast.className = 'fixed top-4 right-4 bg-green-800 text-white px-6 py-4 rounded-lg shadow-lg z-50 animate-fadeIn';
@@ -254,10 +256,40 @@ export default function Home() {
         setTimeout(() => document.body.removeChild(successToast), 500);
       }, 3000);
 
-      // After successful registration, perform a lookup to get the address
-      setShowAddressInput(false);
-      setAddress('');
-      await handleLookup(new Event('submit') as any);
+      // Show indexing spinner for Web 2.5 if there's a transaction
+      if (selected === "2.5" && registrationResult.transaction_id) {
+        setIndexingTransaction(true);
+
+        // After successful registration, update the lookup result but without transaction details yet
+        setShowAddressInput(false);
+        setAddress('');
+        setLookupResult({
+          address: registrationResult.address,
+          version: registrationResult.version,
+          justRegistered: true
+        });
+
+        // Wait for 5 seconds to simulate indexing time
+        setTimeout(() => {
+          setIndexingTransaction(false);
+          // Now update with the transaction ID
+          setLookupResult(prev => prev ? {
+            ...prev,
+            transaction_id: registrationResult.transaction_id
+          } : null);
+        }, 5000);
+      } else {
+        // For Web 2.0, just update immediately
+        setShowAddressInput(false);
+        setAddress('');
+        setLookupResult({
+          address: registrationResult.address,
+          version: registrationResult.version,
+          justRegistered: true
+        });
+      }
+
+      setHasSearched(true);
     } catch (err) {
       setError(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -289,30 +321,29 @@ export default function Home() {
           href="https://github.com/phklive/miden-name-service"
           target="_blank"
           rel="noopener noreferrer"
-          className="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg flex items-center mb-8 transition-colors"
+          className="mb-6 flex items-center bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-md shadow-sm transition-colors"
         >
           <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path fillRule="evenodd" clipRule="evenodd" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+            <path fillRule="evenodd" clipRule="evenodd" d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.38 0-.19-.015-1.23-.015-1.235-3.015.55-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
           </svg>
           View on GitHub
         </a>
 
-        {/* Version selector with Web 3.0 disabled */}
+        {/* Version selector with Web 3.0 enabled */}
         <div className="bg-indigo-950/40 backdrop-blur-md p-3 rounded-xl border border-indigo-800/30 flex mb-8 shadow-lg w-full justify-between">
           {VERSIONS.map((version) => (
             <div key={version.key} className="flex-1 mx-1 relative">
               <button
                 onClick={() => handleVersionChange(version.key)}
                 className={`w-full px-4 py-2.5 rounded-lg transition-all ${selected === version.key
-                    ? `bg-gradient-to-r ${version.color} text-white shadow-md`
-                    : "text-indigo-300 hover:bg-indigo-800/30"
-                  } ${version.key === "3" ? "opacity-60 cursor-not-allowed" : ""}`}
-                disabled={version.key === "3"}
+                  ? `bg-gradient-to-r ${version.color} text-white shadow-md`
+                  : "text-indigo-300 hover:bg-indigo-800/30"
+                  }`}
                 type="button"
               >
                 {version.name}
               </button>
-              {version.key === "3" && (
+              {version.key === "3" && selected !== "3" && (
                 <div className="text-center mt-1 text-sm text-cyan-300 font-medium">
                   Coming soon
                 </div>
@@ -335,179 +366,250 @@ export default function Home() {
           )}
         </div>
 
-        {/* Error message */}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="w-full mb-4 px-4 py-3 bg-red-900/60 border-2 border-red-500/50 rounded-lg text-red-100 text-sm"
-            >
-              {error}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Name input form */}
-        <form
-          onSubmit={handleLookup}
-          className="w-full mb-6"
-        >
-          <div className="relative">
-            <input
-              type="text"
-              value={name}
-              onChange={handleNameChange}
-              placeholder="Search for a name..."
-              className="w-full px-5 py-4 bg-indigo-950/60 backdrop-blur-md border-2 border-indigo-700/50 rounded-2xl text-white shadow-xl focus:outline-none focus:border-indigo-500 transition-colors text-lg"
-              disabled={loading}
-            />
-            <div className="absolute right-5 top-1/2 transform -translate-y-1/2 text-indigo-400 text-sm">
-              {!name.toLowerCase().endsWith('.miden') && '.miden'}
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className={`mt-4 w-full bg-gradient-to-r ${colorScheme.primary} hover:brightness-110 text-white py-4 px-6 rounded-xl font-semibold shadow transition-all focus:outline-none focus:ring-2 focus:ring-white/30 text-lg ${loading ? "opacity-70 cursor-wait" : !name ? "opacity-70 cursor-not-allowed" : ""}`}
-            disabled={!name || loading}
+        {/* Web 3.0 Coming Soon Message */}
+        {selected === "3" ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`rounded-xl ${colorScheme.background} px-6 py-8 text-indigo-100 shadow-xl border-2 border-teal-500/30 w-full mb-8`}
           >
-            {loading ? (
-              <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            <div className="flex flex-col items-center text-center">
+              <div className="h-16 w-16 rounded-full bg-teal-500/20 flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                Searching...
-              </span>
-            ) : "Search"}
-          </button>
-        </form>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-3">Web 3.0 Coming Soon!</h2>
+              <p className="text-teal-200 mb-4">The fully decentralized version of Miden Name Service is currently under development.</p>
+              <p className="text-indigo-200 text-sm mb-2">When launched, this feature will provide:</p>
+              <ul className="text-indigo-300 text-sm space-y-2 mb-6">
+                <li>• Full on-chain name resolution using Miden's Layer 1 blockchain</li>
+                <li>• End-to-end trustless validation using zero-knowledge proofs</li>
+                <li>• Complete decentralization with no central authority</li>
+                <li>• Enhanced privacy and security guarantees</li>
+              </ul>
+              <a
+                href="https://github.com/0xMiden"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-5 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-white font-semibold shadow-lg transition"
+              >
+                Follow Miden for Updates
+              </a>
+            </div>
+          </motion.div>
+        ) : (
+          <>
+            {/* Error message */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="w-full mb-4 px-4 py-3 bg-red-900/60 border-2 border-red-500/50 rounded-lg text-red-100 text-sm"
+                >
+                  {error}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-        {/* Result - Only show after search */}
-        <AnimatePresence>
-          {!loading && hasSearched && displayName && (
-            <motion.div
-              className="mb-4 w-full"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
+            {/* Name input form */}
+            <form
+              onSubmit={handleLookup}
+              className="w-full mb-6"
             >
-              {lookupResult ? (
-                <div className={`rounded-xl ${resultColorScheme.background} px-6 py-6 text-indigo-100 shadow-xl border-2 border-indigo-500/30`}>
-                  <div className="flex items-center mb-4">
-                    <div className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center mr-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <div className="font-bold text-xl text-white">Registered Name</div>
-                      <div className="text-md text-indigo-200">{displayName}</div>
-                    </div>
-                    <div className={`rounded-full px-3 py-1 text-xs font-medium ${resultColorScheme.badge}`}>
-                      {getVersionName(lookupResult.version)}
-                    </div>
-                  </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={name}
+                  onChange={handleNameChange}
+                  placeholder="Search for a name..."
+                  className="w-full px-5 py-4 bg-indigo-950/60 backdrop-blur-md border-2 border-indigo-700/50 rounded-2xl text-white shadow-xl focus:outline-none focus:border-indigo-500 transition-colors text-lg"
+                  disabled={loading}
+                />
+                <div className="absolute right-5 top-1/2 transform -translate-y-1/2 text-indigo-400 text-sm">
+                  {!name.toLowerCase().endsWith('.miden') && '.miden'}
+                </div>
+              </div>
 
-                  <div className="mt-4">
-                    <div className="text-sm text-indigo-300 mb-2 font-medium">Address:</div>
-                    <div className="bg-indigo-950/60 border border-indigo-700/30 rounded-lg p-3 font-mono text-cyan-100 select-all break-all">
-                      {lookupResult.address}
-                    </div>
-                  </div>
+              <button
+                type="submit"
+                className={`mt-4 w-full bg-gradient-to-r ${colorScheme.primary} hover:brightness-110 text-white py-4 px-6 rounded-xl font-semibold shadow transition-all focus:outline-none focus:ring-2 focus:ring-white/30 text-lg ${loading ? "opacity-70 cursor-wait" : !name ? "opacity-70 cursor-not-allowed" : ""}`}
+                disabled={!name || loading}
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Searching...
+                  </span>
+                ) : "Search"}
+              </button>
+            </form>
 
-                  <div className="flex justify-end mt-4">
-                    <button
-                      onClick={copyAddress}
-                      className="px-4 py-2 bg-indigo-800/60 hover:bg-indigo-700/60 rounded-lg transition flex items-center"
-                      type="button"
-                    >
-                      {copied ? (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            {/* Result - Only show after search */}
+            <AnimatePresence>
+              {!loading && hasSearched && displayName && (
+                <motion.div
+                  className="mb-4 w-full"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                >
+                  {lookupResult ? (
+                    <div className={`rounded-xl ${resultColorScheme.background} px-6 py-6 text-indigo-100 shadow-xl border-2 border-indigo-500/30`}>
+                      <div className="flex items-center mb-4">
+                        <div className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center mr-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                          Copy
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className={`rounded-xl ${colorScheme.background} px-6 py-6 text-indigo-100 shadow-xl border-2 border-indigo-500/30`}>
-                  <div className="flex items-center mb-4">
-                    <div className="h-12 w-12 rounded-full bg-yellow-500/20 flex items-center justify-center mr-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <div className="font-bold text-xl text-white">Name Not Registered</div>
-                      <div className="text-md text-indigo-200">{displayName}</div>
-                    </div>
-                  </div>
-
-                  {showAddressInput ? (
-                    <>
-                      <div className="mt-4">
-                        <label className="block text-sm font-medium text-indigo-200 mb-2">
-                          Enter your address (must be 0x-prefixed hex, max 24 bytes):
-                        </label>
-                        <input
-                          type="text"
-                          value={address}
-                          onChange={handleAddressChange}
-                          placeholder="0x..."
-                          className="w-full px-4 py-3 bg-indigo-950/60 border border-indigo-700/50 rounded-lg text-white focus:outline-none focus:border-indigo-500 transition font-mono"
-                        />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-bold text-xl text-white">Registered Name</div>
+                          <div className="text-md text-indigo-200">{displayName}</div>
+                        </div>
+                        <div className={`rounded-full px-3 py-1 text-xs font-medium ${resultColorScheme.badge}`}>
+                          {getVersionName(lookupResult.version)}
+                        </div>
                       </div>
-                      <div className="flex gap-3 mt-4">
+
+                      <div className="mt-4">
+                        <div className="text-sm text-indigo-300 mb-2 font-medium">Address:</div>
+                        <div className="bg-indigo-950/60 border border-indigo-700/30 rounded-lg p-3 font-mono text-cyan-100 select-all break-all">
+                          {lookupResult.address}
+                        </div>
+                      </div>
+
+                      {/* Transaction ID section - only for web 2.5 when just registered */}
+                      {lookupResult.version === "2.5" && lookupResult.justRegistered && (
+                        <div className="mt-4 p-4 bg-indigo-900/30 rounded-lg border border-indigo-700/30">
+                          {indexingTransaction ? (
+                            <div className="flex flex-col items-center justify-center py-2">
+                              <div className="flex items-center mb-2">
+                                <svg className="animate-spin mr-3 h-5 w-5 text-purple-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span className="text-purple-200">Your transaction is being indexed...</span>
+                              </div>
+                              <p className="text-indigo-300 text-sm mt-1">This usually takes a few seconds</p>
+                            </div>
+                          ) : lookupResult.transaction_id ? (
+                            <>
+                              <p className="text-purple-200 mb-2">
+                                See transaction on Midenscan here:
+                              </p>
+                              <a
+                                href={`https://testnet.midenscan.com/tx/${lookupResult.transaction_id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-purple-300 hover:text-purple-100 font-mono flex items-center hover:underline"
+                              >
+                                <span className="truncate">{lookupResult.transaction_id}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
+                            </>
+                          ) : null}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end mt-4">
                         <button
-                          className="flex-1 py-3 rounded-lg bg-indigo-900/60 hover:bg-indigo-800/60 text-indigo-200 font-semibold shadow-lg focus:outline-none transition text-lg"
-                          onClick={() => {
-                            setShowAddressInput(false);
-                            setAddress('');
-                          }}
+                          onClick={copyAddress}
+                          className="px-4 py-2 bg-indigo-800/60 hover:bg-indigo-700/60 rounded-lg transition flex items-center"
                           type="button"
                         >
-                          Cancel
+                          {copied ? (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                              Copy
+                            </>
+                          )}
                         </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={`rounded-xl ${colorScheme.background} px-6 py-6 text-indigo-100 shadow-xl border-2 border-indigo-500/30`}>
+                      <div className="flex items-center mb-4">
+                        <div className="h-12 w-12 rounded-full bg-yellow-500/20 flex items-center justify-center mr-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="font-bold text-xl text-white">Name Not Registered</div>
+                          <div className="text-md text-indigo-200">{displayName}</div>
+                        </div>
+                      </div>
+
+                      {showAddressInput ? (
+                        <>
+                          <div className="mt-4">
+                            <label className="block text-sm font-medium text-indigo-200 mb-2">
+                              Enter your address (must be 0x-prefixed hex, max 24 bytes):
+                            </label>
+                            <input
+                              type="text"
+                              value={address}
+                              onChange={handleAddressChange}
+                              placeholder="0x..."
+                              className="w-full px-4 py-3 bg-indigo-950/60 border border-indigo-700/50 rounded-lg text-white focus:outline-none focus:border-indigo-500 transition font-mono"
+                            />
+                          </div>
+                          <div className="flex gap-3 mt-4">
+                            <button
+                              className="flex-1 py-3 rounded-lg bg-indigo-900/60 hover:bg-indigo-800/60 text-indigo-200 font-semibold shadow-lg focus:outline-none transition text-lg"
+                              onClick={() => {
+                                setShowAddressInput(false);
+                                setAddress('');
+                              }}
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              className={`flex-1 py-3 rounded-lg bg-gradient-to-r ${colorScheme.button} font-semibold text-white shadow-lg focus:outline-none transition text-lg ${loading || !address ? "opacity-40 cursor-not-allowed" : ""}`}
+                              onClick={handleRegister}
+                              disabled={loading || !address}
+                              type="button"
+                            >
+                              Register
+                            </button>
+                          </div>
+                        </>
+                      ) : (
                         <button
-                          className={`flex-1 py-3 rounded-lg bg-gradient-to-r ${colorScheme.button} font-semibold text-white shadow-lg focus:outline-none transition text-lg ${loading || !address ? "opacity-40 cursor-not-allowed" : ""}`}
-                          onClick={handleRegister}
-                          disabled={loading || !address}
+                          className={`mt-3 w-full px-6 py-4 rounded-lg bg-gradient-to-r ${colorScheme.button} font-semibold text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-white/20 transition text-lg`}
+                          onClick={() => setShowAddressInput(true)}
                           type="button"
                         >
                           Register
                         </button>
-                      </div>
-                    </>
-                  ) : (
-                    <button
-                      className={`mt-3 w-full px-6 py-4 rounded-lg bg-gradient-to-r ${colorScheme.button} font-semibold text-white shadow-lg focus:outline-none focus:ring-2 focus:ring-white/20 transition text-lg`}
-                      onClick={() => setShowAddressInput(true)}
-                      type="button"
-                    >
-                      Register
-                    </button>
+                      )}
+                    </div>
                   )}
-                </div>
+                </motion.div>
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </AnimatePresence>
+          </>
+        )}
 
-        {/* Hint text */}
-        {!loading && !hasSearched && !error && (
+        {/* Hint text - only show for Web 2.0 and 2.5 */}
+        {!loading && !hasSearched && !error && selected !== "3" && (
           <div className="text-center text-indigo-400/70 text-sm mt-2">
             Try searching for names like alice.miden or bob.miden
           </div>

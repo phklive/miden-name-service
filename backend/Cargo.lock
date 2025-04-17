@@ -1461,13 +1461,10 @@ dependencies = [
  "miden-crypto",
  "miden-processor",
  "miden-verifier",
- "rand 0.9.0",
- "rand_xoshiro",
  "semver 1.0.26",
  "serde",
  "thiserror 2.0.12",
  "toml",
- "winter-rand-utils",
 ]
 
 [[package]]
@@ -1540,7 +1537,6 @@ dependencies = [
  "miden-prover",
  "miden-verifier",
  "rand 0.9.0",
- "rand_chacha 0.9.0",
  "thiserror 2.0.12",
  "winter-maybe-async",
 ]
@@ -2095,15 +2091,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 dependencies = [
  "getrandom 0.3.2",
-]
-
-[[package]]
-name = "rand_xoshiro"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f703f4665700daf5512dcca5f43afa6af89f09db47fb56be587f80636bda2d41"
-dependencies = [
- "rand_core 0.9.3",
 ]
 
 [[package]]
@@ -3640,16 +3627,6 @@ dependencies = [
  "winter-fri",
  "winter-math",
  "winter-maybe-async",
- "winter-utils",
-]
-
-[[package]]
-name = "winter-rand-utils"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc6321741f063344258c80f0c0255a559ded99bc17fe99fab9577f2460065ddf"
-dependencies = [
- "rand 0.8.5",
  "winter-utils",
 ]
 

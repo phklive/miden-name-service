@@ -11,6 +11,7 @@ use miden_objects::vm::AdviceInputs;
 
 use crate::{
     error::{AppError, Result},
+    handler::{LookupResponse, RegisterResponse},
     serde::{str_to_word, word_to_str},
     utils::{LOOKUP_SCRIPT, MNS_CONTRACT, REGISTER_SCRIPT, create_library},
 };
@@ -20,7 +21,7 @@ pub async fn register(
     account_id: AccountId,
     name: String,
     address: String,
-) -> Result<String> {
+) -> Result<RegisterResponse> {
     // Input validation
     if name.is_empty() {
         return Err(AppError::BadRequest("Name cannot be empty".to_string()));
@@ -99,21 +100,27 @@ pub async fn register(
     );
 
     // submit tx
-    client
-        .testing_apply_transaction(tx_result)
-        .await
-        .map_err(|e| {
-            error!("Failed to apply transaction: {}", e);
-            AppError::Internal(format!("Transaction submission failed: {}", e))
-        })?;
+    client.submit_transaction(tx_result).await.map_err(|e| {
+        error!("Failed to submit transaction: {}", e);
+        AppError::Internal(format!("Transaction submission failed: {}", e))
+    })?;
 
     // build response
-    let response = format!("Successfully registered `{name}` for `{address}` using Web2.5");
+    let response = RegisterResponse {
+        name,
+        address,
+        version: "2.5".to_string(),
+        transaction_id: Some(tx_id.to_string()),
+    };
 
     Ok(response)
 }
 
-pub async fn lookup(client: &mut Client, account_id: AccountId, name: String) -> Result<String> {
+pub async fn lookup(
+    client: &mut Client,
+    account_id: AccountId,
+    name: String,
+) -> Result<LookupResponse> {
     // Input validation
     if name.is_empty() {
         return Err(AppError::BadRequest("Name cannot be empty".to_string()));
@@ -172,8 +179,6 @@ pub async fn lookup(client: &mut Client, account_id: AccountId, name: String) ->
         )));
     }
 
-    info!("Stack after lookup: {:?}", stack);
-
     let address = word_to_str([stack[3], stack[2], stack[1], stack[0]]);
 
     // Check if address is empty or zero (indicating name not found)
@@ -184,5 +189,13 @@ pub async fn lookup(client: &mut Client, account_id: AccountId, name: String) ->
         )));
     }
 
-    Ok(address)
+    // build response
+    let response = LookupResponse {
+        address,
+        // TODO: Change this when we have web3 addresses too (will need to find a way to
+        // differentiate them)
+        version: "2.5".to_string(),
+    };
+
+    Ok(response)
 }

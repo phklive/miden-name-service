@@ -21,8 +21,16 @@ pub struct User {
 
 #[derive(Serialize)]
 pub struct LookupResponse {
-    address: String,
-    version: String,
+    pub address: String,
+    pub version: String,
+}
+
+#[derive(Serialize)]
+pub struct RegisterResponse {
+    pub name: String,
+    pub address: String,
+    pub version: String,
+    pub transaction_id: Option<String>,
 }
 
 #[derive(Clone)]
@@ -32,15 +40,14 @@ pub struct AppState {
 }
 
 // Request enum for different Client operations
-#[derive(Debug)]
 pub enum ClientRequest {
     Lookup {
         params: std::collections::HashMap<String, String>,
-        respond: tokio::sync::oneshot::Sender<Result<String>>,
+        respond: tokio::sync::oneshot::Sender<Result<LookupResponse>>,
     },
     Register {
         params: std::collections::HashMap<String, String>,
-        respond: tokio::sync::oneshot::Sender<Result<String>>,
+        respond: tokio::sync::oneshot::Sender<Result<RegisterResponse>>,
     },
 }
 
@@ -52,21 +59,55 @@ pub async fn register_handler(
     let address = params.get("address").cloned().unwrap_or_default();
     let version = params.get("version").cloned().unwrap_or_default();
 
-    let user = User {
-        name,
-        address,
-        version: version.clone(),
-    };
-
-    if user.name.is_empty() {
+    if name.is_empty() {
         return AppError::BadRequest("Name parameter is required".to_string()).into_response();
     }
 
-    if user.address.is_empty() {
+    if address.is_empty() {
         return AppError::BadRequest("Address parameter is required".to_string()).into_response();
     }
 
+    if version.is_empty() {
+        return AppError::BadRequest("Version parameter is required".to_string()).into_response();
+    }
+
+    // Check if user already exists in database
+    if let Ok(Some(_)) = state.db.lookup_user(&name) {
+        info!(
+            "Failed to register user: {} user has already been registered in database.",
+            name
+        );
+        return AppError::Database("User has already been registered.".to_string()).into_response();
+    }
+
+    let (tx, rx) = oneshot::channel();
+    let request = ClientRequest::Lookup {
+        params: params.clone(),
+        respond: tx,
+    };
+
+    // Send lookup request to check if user exists in smart contract
+    if let Ok(_) = state.tx.send(request).await {
+        // Wait for the response
+        if let Ok(Ok(_)) = rx.await {
+            // User exists in smart contract
+            info!(
+                "Failed to register user: {} user has already been registered in smart contract.",
+                name
+            );
+            return AppError::Database("User has already been registered.".to_string())
+                .into_response();
+        }
+    }
+
     if version == "2" {
+        // Instantiate User
+        let user = User {
+            name: name.clone(),
+            address: address.clone(),
+            version: version.clone(),
+        };
+
         // Save user to database
         if let Err(e) = state.db.insert_user(&user) {
             info!("Failed to save user: {}", e);
@@ -74,16 +115,19 @@ pub async fn register_handler(
                 .into_response();
         };
 
-        let res = format!(
-            "Successfully registered: `{}` for `{}` using `{}`",
-            user.address, user.name, user.version
-        );
+        let response = RegisterResponse {
+            name: user.name,
+            address: user.address,
+            version: user.version,
+            transaction_id: None,
+        };
 
-        return (StatusCode::OK, res).into_response();
+        return (StatusCode::OK, Json(response)).into_response();
     } else if version == "2.5" {
         let (tx, rx) = oneshot::channel();
+
         let request = ClientRequest::Register {
-            params,
+            params: params.clone(),
             respond: tx,
         };
 
@@ -95,10 +139,7 @@ pub async fn register_handler(
         // Wait for the response
         match rx.await {
             Ok(result) => match result {
-                Ok(response) => {
-                    // No longer saving 2.5 users to the database
-                    (StatusCode::OK, response).into_response()
-                }
+                Ok(response) => (StatusCode::OK, Json(response)).into_response(),
                 Err(err) => err.into_response(),
             },
             Err(_) => AppError::Internal("Failed to receive response".to_string()).into_response(),
@@ -166,17 +207,7 @@ pub async fn lookup_handler(
     // Wait for the response
     match rx.await {
         Ok(result) => match result {
-            Ok(address) => {
-                info!("User found in smart contract: {} -> {}", name, address);
-
-                // Create response with address and version
-                let response = LookupResponse {
-                    address,
-                    version: "2.5".to_string(), // Smart contract users are Web2.5
-                };
-
-                (StatusCode::OK, Json(response)).into_response()
-            }
+            Ok(response) => (StatusCode::OK, Json(response)).into_response(),
             Err(err) => {
                 info!("User not found in smart contract or lookup error");
                 err.into_response()
