@@ -343,11 +343,6 @@ export default function Home() {
               >
                 {version.name}
               </button>
-              {version.key === "3" && selected !== "3" && (
-                <div className="text-center mt-1 text-sm text-cyan-300 font-medium">
-                  Coming soon
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -371,14 +366,9 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`rounded-xl ${colorScheme.background} px-6 py-8 text-indigo-100 shadow-xl border-2 border-teal-500/30 w-full mb-8`}
+            className={`rounded-xl ${colorScheme.background} px-6 py-8 text-indigo-100 shadow-xl border-2 border-teal-500/30 w-full)`}
           >
             <div className="flex flex-col items-center text-center">
-              <div className="h-16 w-16 rounded-full bg-teal-500/20 flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-teal-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              </div>
               <h2 className="text-2xl font-bold text-white mb-3">Web 3.0 Coming Soon!</h2>
               <p className="text-teal-200 mb-4">The fully decentralized version of Miden Name Service is currently under development.</p>
               <p className="text-indigo-200 text-sm mb-2">When launched, this feature will provide:</p>
@@ -389,7 +379,7 @@ export default function Home() {
                 <li>• Enhanced privacy and security guarantees</li>
               </ul>
               <a
-                href="https://github.com/0xMiden"
+                href="https://x.com/0xPolygonMiden"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-5 py-3 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 text-white font-semibold shadow-lg transition"
