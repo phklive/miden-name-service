@@ -141,7 +141,10 @@ pub async fn lookup(
         })?;
 
     // build inputs
+    // TODO: problem here with some names that error out the tx_executor
+    println!("name: {name}");
     let felt_name = str_to_word(&name);
+    println!("felt_name: {:?}", felt_name);
     let tx_script = TransactionScript::compile(
         LOOKUP_SCRIPT.clone(),
         [(
@@ -169,7 +172,7 @@ pub async fn lookup(
         .await
         .map_err(|e| {
             error!("Failed to execute program: {}", e);
-            AppError::Internal(format!("Program execution failed: {}", e))
+            AppError::Internal(format!("Program execution hijack failed: {}", e))
         })?;
 
     if stack.len() < 4 {

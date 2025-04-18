@@ -18,6 +18,9 @@
 [x] Deploy smart contract on the blockchain (for now it's only updating the local state)
 [x] Add database to store web2 data
 [x] Only deploy smart contract if it does not exist, else use already deployed contract
+[ ] Removes logs from different crates that i import
+[ ] Fix backend error 
+-> [2025-04-18T00:03:29Z ERROR name_service::error] Internal Server Error: Program execution failed: transaction executor error
 
 ## Frontend
 
