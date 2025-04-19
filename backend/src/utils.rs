@@ -91,7 +91,11 @@ pub async fn create_account(client: &mut Client) -> Account {
     let component = AccountComponent::compile(
         MNS_CONTRACT.clone(),
         assembler,
-        vec![StorageSlot::empty_map()],
+        vec![
+            StorageSlot::empty_map(),
+            StorageSlot::empty_value(),
+            StorageSlot::empty_value(),
+        ],
     )
     .unwrap()
     .with_supports_all_types();

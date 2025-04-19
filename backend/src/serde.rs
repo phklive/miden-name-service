@@ -1,13 +1,19 @@
 use miden_client::{Felt, Word};
 
 pub fn str_to_word(s: &str) -> Word {
+    println!("Received string: {s}");
+
     let bytes = s.as_bytes();
+
+    println!("bytes: {:?}", bytes);
 
     assert!(bytes.len() <= 24, "string `{s}` is too large");
 
     let mut padded_bytes = vec![0u8; 32];
     padded_bytes[..bytes.len()].copy_from_slice(bytes);
     padded_bytes[31] = bytes.len() as u8;
+
+    println!("padded: {:?}", padded_bytes);
 
     assert!(padded_bytes.len() == 32);
 
@@ -74,6 +80,10 @@ mod tests {
             "",
             "a",
             "ab",
+            "yas",
+            "yas.miden",
+            "paulhenry",
+            "paulhenry.miden",
             "hello",
             "hello world",
             "012345678901234567890123", // 24 chars (maximum)
@@ -107,7 +117,7 @@ mod tests {
     fn test_max_length_unicode() {
         // Unicode characters can be up to 4 bytes each in UTF-8
         // "世" is 3 bytes, so we need a mix to hit exactly 24 bytes
-        let s = "123456789012345678世界世"; // Should be exactly 24 bytes
+        let s = "123456789012345678世界"; // Should be exactly 24 bytes
         assert_eq!(
             s.as_bytes().len(),
             24,

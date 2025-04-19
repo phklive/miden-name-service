@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use log::{error, info};
 use miden_client::{
-    Client, ONE,
+    Client, ZERO,
     account::AccountId,
     transaction::{TransactionRequestBuilder, TransactionScript},
 };
@@ -52,7 +52,7 @@ pub async fn register(
     let tx_script = TransactionScript::compile(
         REGISTER_SCRIPT.clone(),
         [(
-            [ONE, ONE, ONE, ONE],
+            [ZERO, ZERO, ZERO, ZERO],
             vec![
                 felt_account_id[0],
                 felt_account_id[1],
@@ -128,7 +128,7 @@ pub async fn lookup(
 
     // sync client to latest chain state
     client.sync_state().await.map_err(|e| {
-        error!("Failed to sync client state: {}", e);
+        error!("Failed to sync chain state: {}", e);
         AppError::Internal(format!("Failed to sync blockchain state: {}", e))
     })?;
 
@@ -147,10 +147,7 @@ pub async fn lookup(
     println!("felt_name: {:?}", felt_name);
     let tx_script = TransactionScript::compile(
         LOOKUP_SCRIPT.clone(),
-        [(
-            [ONE, ONE, ONE, ONE],
-            vec![felt_name[0], felt_name[1], felt_name[2], felt_name[3]],
-        )],
+        [([ZERO, ZERO, ZERO, ZERO], felt_name.to_vec())],
         assembler.with_library(&component_lib).map_err(|e| {
             error!("Failed to attach library: {}", e);
             AppError::Internal(format!("Script compilation error: {}", e))
@@ -162,6 +159,9 @@ pub async fn lookup(
     })?;
 
     // execute transaction locally
+
+    println!("Inputs: id {}", account_id,);
+
     let stack = client
         .execute_program(
             account_id,
@@ -170,10 +170,12 @@ pub async fn lookup(
             BTreeSet::default(),
         )
         .await
-        .map_err(|e| {
-            error!("Failed to execute program: {}", e);
-            AppError::Internal(format!("Program execution hijack failed: {}", e))
-        })?;
+        .unwrap();
+
+    // .map_err(|e| {
+    //     error!("Failed to execute program: {}", e);
+    //     AppError::Internal(format!("Program execution failed: {}", e))
+    // })?;
 
     if stack.len() < 4 {
         return Err(AppError::NotFound(format!(
@@ -183,6 +185,8 @@ pub async fn lookup(
     }
 
     let address = word_to_str([stack[3], stack[2], stack[1], stack[0]]);
+
+    println!("address: {:?}", address);
 
     // Check if address is empty or zero (indicating name not found)
     if address.trim().is_empty() || address == "0000000000000000" {

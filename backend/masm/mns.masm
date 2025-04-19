@@ -15,14 +15,13 @@ end
 #! Outputs: []
 export.register
     # get inputs from advice provider
-    push.1.1.1.1 adv.push_mapval dropw
-    padw adv_loadw padw adv_loadw
+    adv.push_mapval adv_loadw swapw adv_loadw
     # => [NAME_WORD, ACCOUNT_ID]
 
     push.0
     # => [index, NAME_WORD, ACCOUNT_ID]
 
-    exec.account::set_map_item dropw dropw dropw dropw
+    exec.account::set_map_item dropw dropw
     # => []
 end
 
@@ -32,13 +31,13 @@ end
 #! Outputs: [ACCOUNT_ID]
 export.lookup
     # get inputs from advice provider
-    push.1.1.1.1 adv.push_mapval dropw padw adv_loadw 
+    adv.push_mapval adv_loadw 
     # => [NAME_WORD]
 
     push.0
     # => [index, NAME_WORD]
 
-    exec.account::get_map_item swapw dropw
+    exec.account::get_map_item
     # => [ACCOUNT_ID] 
 end
 
