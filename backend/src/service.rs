@@ -170,12 +170,10 @@ pub async fn lookup(
             BTreeSet::default(),
         )
         .await
-        .unwrap();
-
-    // .map_err(|e| {
-    //     error!("Failed to execute program: {}", e);
-    //     AppError::Internal(format!("Program execution failed: {}", e))
-    // })?;
+        .map_err(|e| {
+            error!("Failed to execute program: {}", e);
+            AppError::Internal(format!("Program execution failed: {}", e))
+        })?;
 
     if stack.len() < 4 {
         return Err(AppError::NotFound(format!(

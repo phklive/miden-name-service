@@ -8,6 +8,6 @@ help:
 backend: ## Runs the backend locally
 	cd backend && RUST_LOG=info cargo run --release
 
-.PHONY: run-frontend
+.PHONY: frontend
 frontend: ## Runs the frontend locally
 	cd frontend && npm run dev
