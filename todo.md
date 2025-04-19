@@ -25,7 +25,7 @@
 ## Frontend
 
 [ ] Improve explanation of different implementations (+ add links to their components)
-[ ] Add diagrams from Excalidraw to explain interaction flow (user, frontend, server, blockchain)
+[x] Add diagrams from Excalidraw to explain interaction flow (user, frontend, server, blockchain)
 [x] Add description / explanation of the app
 [ ] Break down code into multiple components
 [ ] Add Miden version that the app is using currently
