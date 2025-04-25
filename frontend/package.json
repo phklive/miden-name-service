@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@demox-labs/miden-sdk": "^0.8.2",
+    "@demox-labs/miden-sdk": "^0.8.3",
     "framer-motion": "^12.7.3",
     "next": "15.2.5",
     "react": "^19.0.0",
@@ -18,12 +18,12 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
+    "@types/node": "20.17.30",
+    "@types/react": "19.1.2",
     "@types/react-dom": "^19",
     "eslint": "9.24.0",
     "eslint-config-next": "15.3.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "5.8.3"
   }
 }

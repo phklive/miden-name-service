@@ -1,9 +1,10 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from 'next/image';
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
+import { log_contract } from "./client";
 
 // Define types
 type WebVersion = "2" | "2.5" | "3";
@@ -79,6 +80,13 @@ const getVersionName = (versionKey: string): string => VERSIONS.find(v => v.key 
 
 // Main component
 export default function Home() {
+  useEffect(() => {
+    let fn = async () => {
+      await log_contract()
+    }
+
+    fn()
+  })
   const [selected, setSelected] = useState<WebVersion>("2");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
