@@ -40,11 +40,14 @@ lazy_static! {
 }
 
 pub async fn create_client() -> Client {
-    let endpoint = Endpoint::new(
-        "https".to_string(),
-        "rpc.testnet.miden.io".to_string(),
-        Some(443),
-    );
+    // let endpoint = Endpoint::new(
+    //     "https".to_string(),
+    //     "rpc.devnet.miden.io".to_string(),
+    //     Some(443),
+    // );
+
+    let endpoint = Endpoint::new("http".to_string(), "localhost".to_string(), Some(3002));
+
     let timeout_ms = 10_000;
     let rpc_api = Arc::new(TonicRpcClient::new(&endpoint, timeout_ms));
     let client = ClientBuilder::new()

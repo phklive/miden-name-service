@@ -19,7 +19,7 @@
 [x] Add database to store web2 data
 [x] Only deploy smart contract if it does not exist, else use already deployed contract
 [ ] Removes logs from different crates that i import
-[ ] Fix backend error 
+[x] Fix backend error 
 -> [2025-04-18T00:03:29Z ERROR name_service::error] Internal Server Error: Program execution failed: transaction executor error
 
 ## Frontend
@@ -28,5 +28,4 @@
 [x] Add diagrams from Excalidraw to explain interaction flow (user, frontend, server, blockchain)
 [x] Add description / explanation of the app
 [ ] Break down code into multiple components
-[ ] Add Miden version that the app is using currently
 [x] Add web3 version to frontend (Connect wallet to frontend and use TS client) -> Not possible now without public txs
