@@ -7,7 +7,8 @@
     * Solana: [SNS](https://www.sns.id/)
     * Ethereum: [ENS](https://app.ens.domains/)
     * Ethereum: [UD](https://unstoppabledomains.com/)
-[ ] Deploy app
+[x] Rent server
+[ ] Deploy app on server
 [ ] Add benchmarks (to see the difference in speed between the different implementations)
 [ ] Add documentation in README.md in github
      
