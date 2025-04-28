@@ -5,6 +5,9 @@ import Image from 'next/image';
 import Lightbox from "yet-another-react-lightbox";
 import "yet-another-react-lightbox/styles.css";
 
+// Define API base URL with fallback to localhost
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
 // Define types
 type WebVersion = "2" | "2.5" | "3";
 
@@ -139,7 +142,7 @@ export default function Home() {
     }
     setLoading(true); setError(''); setLookupResult(null);
     try {
-      const response = await fetch(`http://localhost:3001/lookup?name=${encodeURIComponent(displayName)}`);
+      const response = await fetch(`${API_BASE_URL}/lookup?name=${encodeURIComponent(displayName)}`);
       if (!response.ok) {
         if (response.status === 404) { setLookupResult(null); setHasSearched(true); }
         else { throw new Error(`Lookup failed: ${await response.text()}`); }
@@ -160,7 +163,7 @@ export default function Home() {
     setLoading(true); setError('');
     try {
       const versionParam = getVersionParam(selected);
-      const response = await fetch(`http://localhost:3001/register?name=${encodeURIComponent(displayName)}&address=${encodeURIComponent(address)}&version=${versionParam}`, { method: 'PUT' });
+      const response = await fetch(`${API_BASE_URL}/register?name=${encodeURIComponent(displayName)}&address=${encodeURIComponent(address)}&version=${versionParam}`, { method: 'PUT' });
       if (!response.ok) { throw new Error(`Registration failed: ${await response.text()}`); }
 
       const registrationResult: RegisterResponse = await response.json();
